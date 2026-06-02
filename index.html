@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<meta name="theme-color" content="#1a1d27" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="TDS Converter" />
+<meta name="description" content="TDS / wt% converter for NaCl, MgSO4, custom ion composition, and fixed-density solutions" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+<title>TDS / wt% Converter</title>
+<style>
+:root {
+  --bg:#0f1117; --surface:#1a1d27; --surface2:#22263a;
+  --border:rgba(255,255,255,0.10); --border2:rgba(255,255,255,0.18);
+  --text:#e8eaf0; --muted:#8b90a8; --hint:#555b78;
+  --accent:#4f8ef7; --accent-bg:rgba(79,142,247,0.12);
+  --success:#3ecf8e; --warn:#f0a500; --danger:#f26c6c;
+  --radius:10px; --radius-sm:6px;
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:15px;}
+body{display:flex;flex-direction:column;min-height:100vh;}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 20px;
+  display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10;}
+header h1{font-size:17px;font-weight:600;letter-spacing:-0.2px;}
+header p{font-size:12px;color:var(--muted);margin-top:1px;}
+.logo{width:36px;height:36px;background:var(--accent-bg);border-radius:var(--radius-sm);
+  display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+main{flex:1;padding:16px;max-width:680px;margin:0 auto;width:100%;padding-bottom:40px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:14px 16px;margin-bottom:12px;}
+.card-label{font-size:11px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:10px;}
+.seg{display:flex;gap:0;}
+.seg button{flex:1;padding:8px 4px;font-size:13px;font-weight:500;background:var(--surface2);
+  color:var(--muted);border:1px solid var(--border);cursor:pointer;transition:background 0.15s,color 0.15s;}
+.seg button:first-child{border-radius:var(--radius-sm) 0 0 var(--radius-sm);}
+.seg button:last-child{border-radius:0 var(--radius-sm) var(--radius-sm) 0;}
+.seg button:not(:last-child){border-right:none;}
+.seg button.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.seg button:not(.active):hover{background:var(--surface2);color:var(--text);}
+input[type=number]{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);
+  color:var(--text);font-size:15px;padding:8px 10px;outline:none;transition:border-color 0.15s;
+  -moz-appearance:textfield;}
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;}
+input[type=number]:focus{border-color:var(--accent);}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:2px;
+  background:var(--surface2);outline:none;cursor:pointer;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;
+  border-radius:50%;background:var(--accent);cursor:pointer;}
+input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;
+  background:var(--accent);border:none;cursor:pointer;}
+.convert-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.convert-box{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;}
+.convert-box .result{font-size:26px;font-weight:600;color:var(--text);margin-top:8px;
+  padding-top:8px;border-top:1px solid var(--border);}
+.convert-box .unit{font-size:13px;color:var(--muted);}
+.input-row{display:flex;gap:8px;align-items:center;}
+.input-row input{flex:1;min-width:0;}
+.detail-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:10px;}
+@media(min-width:480px){.detail-grid{grid-template-columns:repeat(4,1fr);}}
+.detail-cell{background:var(--surface2);border-radius:var(--radius-sm);padding:10px;}
+.detail-cell .dlabel{font-size:11px;color:var(--hint);text-transform:uppercase;
+  letter-spacing:0.05em;margin-bottom:4px;}
+.detail-cell .dvalue{font-size:14px;font-weight:600;color:var(--text);}
+.detail-note{font-size:12px;color:var(--muted);margin-top:2px;}
+.temp-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.temp-row input[type=range]{flex:1;min-width:100px;}
+.temp-val-row{display:flex;align-items:center;gap:6px;}
+.ion-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 20px;}
+.ion-col-label{font-size:11px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:8px;}
+.ion-row{display:flex;align-items:center;gap:8px;margin-bottom:7px;}
+.ion-row label{font-size:13px;color:var(--muted);width:82px;flex-shrink:0;}
+.ion-row input{width:82px;font-size:13px;padding:6px 8px;}
+.ion-row span{font-size:12px;color:var(--hint);white-space:nowrap;}
+.ion-footer{border-top:1px solid var(--border);margin-top:12px;padding-top:12px;
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+.tds-sum{display:flex;align-items:baseline;gap:8px;}
+.tds-sum .big{font-size:22px;font-weight:600;color:var(--text);}
+.tds-sum .unit{font-size:13px;color:var(--muted);}
+.density-input-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.density-input-row span{font-size:12px;color:var(--muted);}
+.wt-result-row{border-top:1px solid var(--border);margin-top:10px;padding-top:10px;
+  display:flex;align-items:baseline;gap:8px;}
+.wt-result-row .big{font-size:22px;font-weight:600;color:var(--success);}
+.wt-result-row .note{font-size:12px;color:var(--hint);}
+.breakdown{margin-top:10px;border-top:1px solid var(--border);padding-top:10px;}
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
+.bar-row .ion-name{font-size:12px;color:var(--muted);width:72px;flex-shrink:0;}
+.bar-track{height:6px;background:var(--accent);border-radius:3px;min-width:2px;}
+.bar-row .bar-val{font-size:12px;color:var(--hint);}
+.ref-table-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border);}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+thead tr{background:var(--surface2);}
+th{padding:8px 12px;text-align:left;font-weight:600;color:var(--muted);font-size:11px;
+  text-transform:uppercase;letter-spacing:0.05em;white-space:nowrap;}
+th:not(:first-child){text-align:right;}
+td{padding:7px 12px;border-top:1px solid var(--border);color:var(--text);}
+td:not(:first-child){text-align:right;}
+tr:nth-child(even) td{background:rgba(255,255,255,0.02);}
+.footnote{font-size:11px;color:var(--hint);margin-top:6px;}
+.sol-note{font-size:11px;color:var(--hint);margin-top:8px;}
+.disabled{opacity:0.4;pointer-events:none;}
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--surface2);border-radius:3px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">⚗</div>
+  <div>
+    <h1>TDS / wt% Converter</h1>
+    <p>NaCl · MgSO₄ · Custom ions · Fixed ρ</p>
+  </div>
+</header>
+
+<main>
+
+<div class="card">
+  <div class="card-label">Solution type</div>
+  <div class="seg" id="sol-seg">
+    <button class="active" onclick="setSolution('nacl')">NaCl</button>
+    <button onclick="setSolution('mgso4')">MgSO₄</button>
+    <button onclick="setSolution('ions')">Custom ions</button>
+    <button onclick="setSolution('other')">Fixed ρ</button>
+  </div>
+  <p class="sol-note" id="sol-note">NaCl: Rogers &amp; Pitzer (1982), valid 0–100 °C, 0–26.4 wt%.</p>
+</div>
+
+<div class="card" id="ions-panel" style="display:none;">
+  <div class="ion-grid">
+    <div>
+      <div class="ion-col-label">Cations</div>
+      <div id="cation-rows"></div>
+    </div>
+    <div>
+      <div class="ion-col-label">Anions</div>
+      <div id="anion-rows"></div>
+    </div>
+  </div>
+  <div class="ion-footer">
+    <div class="tds-sum">
+      <span style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;">Sum TDS</span>
+      <span class="big" id="ions-tds-sum">0</span>
+      <span class="unit">mg/L</span>
+    </div>
+    <div class="density-input-row">
+      <span>Density for wt%</span>
+      <input type="number" id="ions-density" placeholder="e.g. 1.020" min="0.9" max="2.5" step="0.0001" style="width:100px;" oninput="calcIons()" />
+      <span>g/mL</span>
+    </div>
+  </div>
+  <div class="wt-result-row" id="ions-wt-row" style="display:none;">
+    <span style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;">wt%</span>
+    <span class="big" id="ions-wt-result">—</span>
+    <span class="note" id="ions-wt-note"></span>
+  </div>
+  <div id="ions-breakdown"></div>
+</div>
+
+<div class="card" id="other-panel" style="display:none;">
+  <div class="card-label">Fixed density</div>
+  <div class="input-row">
+    <input type="number" id="custom-density" placeholder="e.g. 1.025" min="0.5" max="2.5" step="0.0001" style="width:120px;" oninput="onCustomDensity()" />
+    <span style="color:var(--muted);font-size:13px;">g/mL</span>
+    <span style="color:var(--hint);font-size:12px;">— temperature correction disabled</span>
+  </div>
+</div>
+
+<div class="card" id="temp-card">
+  <div class="card-label">Temperature</div>
+  <div class="temp-row">
+    <input type="range" id="temp-slider" min="0" max="100" value="25" step="1" oninput="onTempSlider()" />
+    <div class="temp-val-row">
+      <input type="number" id="temp-input" value="25" min="0" max="100" step="0.1" style="width:70px;" oninput="onTempInput()" />
+      <div class="seg" style="width:auto;">
+        <button id="btn-c" class="active" onclick="setUnit('C')" style="flex:none;padding:8px 12px;">°C</button>
+        <button id="btn-f" onclick="setUnit('F')" style="flex:none;padding:8px 12px;">°F</button>
+      </div>
+    </div>
+  </div>
+  <p class="sol-note" id="temp-note">Valid range: 0–100 °C.</p>
+</div>
+
+<div id="converter-panel">
+  <div class="convert-grid">
+    <div class="convert-box">
+      <div class="card-label">TDS → wt%</div>
+      <div class="input-row">
+        <input type="number" id="tds-input" placeholder="e.g. 35000" min="0" oninput="convertFromTDS()" />
+        <span class="unit">mg/L</span>
+      </div>
+      <div class="result" id="wt-result">—</div>
+      <div class="unit">wt%</div>
+    </div>
+    <div class="convert-box">
+      <div class="card-label">wt% → TDS</div>
+      <div class="input-row">
+        <input type="number" id="wt-input" placeholder="e.g. 3.5" min="0" step="0.01" oninput="convertFromWT()" />
+        <span class="unit">wt%</span>
+      </div>
+      <div class="result" id="tds-result">—</div>
+      <div class="unit">mg/L</div>
+    </div>
+  </div>
+
+  <div class="card" id="detail-panel" style="display:none;margin-top:12px;">
+    <div class="detail-grid">
+      <div class="detail-cell"><div class="dlabel">Density used</div><div class="dvalue" id="d-density">—</div></div>
+      <div class="detail-cell"><div class="dlabel">TDS (mg/kg)</div><div class="dvalue" id="d-ppm">—</div></div>
+      <div class="detail-cell"><div class="dlabel">Category</div><div class="dvalue" id="d-category">—</div></div>
+      <div class="detail-cell"><div class="dlabel" id="d-err-label">Δ vs 25°C</div><div class="dvalue" id="d-err">—</div></div>
+    </div>
+    <p class="detail-note" id="d-note"></p>
+  </div>
+</div>
+
+<div id="ref-section" style="margin-top:4px;">
+  <div class="card-label" style="margin-bottom:6px;padding-left:2px;">Reference table</div>
+  <div class="ref-table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="text-align:left;">wt%</th>
+          <th>Density (g/mL)</th>
+          <th>TDS (mg/L)</th>
+          <th style="text-align:left;">Use case</th>
+        </tr>
+      </thead>
+      <tbody id="ref-table"></tbody>
+    </table>
+  </div>
+  <p class="footnote" id="ref-footnote"></p>
+</div>
+
+</main>
+
+<script>
+var tempUnit='C',tempC=25,solutionType='nacl',customDensityVal=null;
+var IONS={
+  cations:[
+    {id:'na',  label:'Na\u207A',         mw:22.990},
+    {id:'ca',  label:'Ca\u00B2\u207A',   mw:40.078},
+    {id:'mg',  label:'Mg\u00B2\u207A',   mw:24.305},
+    {id:'k',   label:'K\u207A',          mw:39.098},
+    {id:'li',  label:'Li\u207A',         mw:6.941},
+    {id:'fe2', label:'Fe\u00B2\u207A',   mw:55.845},
+    {id:'fe3', label:'Fe\u00B3\u207A',   mw:55.845},
+    {id:'mn',  label:'Mn\u00B2\u207A',   mw:54.938},
+    {id:'al',  label:'Al\u00B3\u207A',   mw:26.982},
+    {id:'sr',  label:'Sr\u00B2\u207A',   mw:87.620},
+    {id:'ba',  label:'Ba\u00B2\u207A',   mw:137.327},
+    {id:'nh4', label:'NH\u2084\u207A',   mw:18.038}
+  ],
+  anions:[
+    {id:'cl',   label:'Cl\u207B',                mw:35.453},
+    {id:'so4',  label:'SO\u2084\u00B2\u207B',    mw:96.060},
+    {id:'hco3', label:'HCO\u2083\u207B',         mw:61.017},
+    {id:'co3',  label:'CO\u2083\u00B2\u207B',    mw:60.009},
+    {id:'no3',  label:'NO\u2083\u207B',          mw:62.004},
+    {id:'po4',  label:'PO\u2084\u00B3\u207B',    mw:94.971},
+    {id:'f',    label:'F\u207B',                 mw:18.998},
+    {id:'br',   label:'Br\u207B',                mw:79.904},
+    {id:'sio2', label:'SiO\u2082',               mw:60.083},
+    {id:'b',    label:'B (H\u2083BO\u2083)',      mw:61.833}
+  ]
+};
+function buildIonRows(){
+  function makeRow(ion){
+    var d=document.createElement('div');d.className='ion-row';
+    var l=document.createElement('label');l.textContent=ion.label;
+    var inp=document.createElement('input');inp.type='number';inp.min='0';inp.step='0.01';
+    inp.placeholder='0';inp.id='ion-'+ion.id;inp.addEventListener('input',calcIons);
+    var u=document.createElement('span');u.textContent='mg/L';
+    d.appendChild(l);d.appendChild(inp);d.appendChild(u);return d;
+  }
+  var cr=document.getElementById('cation-rows'),ar=document.getElementById('anion-rows');
+  cr.innerHTML='';ar.innerHTML='';
+  IONS.cations.forEach(function(ion){cr.appendChild(makeRow(ion));});
+  IONS.anions.forEach(function(ion){ar.appendChild(makeRow(ion));});
+}
+function calcIons(){
+  var total=0,breakdown=[];
+  IONS.cations.concat(IONS.anions).forEach(function(ion){
+    var el=document.getElementById('ion-'+ion.id);
+    var v=el?parseFloat(el.value)||0:0;
+    if(v>0){total+=v;breakdown.push({label:ion.label,val:v});}
+  });
+  document.getElementById('ions-tds-sum').textContent=total.toLocaleString('en-US',{maximumFractionDigits:1});
+  var rho=parseFloat(document.getElementById('ions-density').value)||null;
+  var wtRow=document.getElementById('ions-wt-row');
+  if(rho&&rho>0&&total>0){
+    var wt=total/(10*rho*1000);
+    document.getElementById('ions-wt-result').textContent=wt.toFixed(4);
+    document.getElementById('ions-wt-note').textContent='using \u03C1 = '+rho.toFixed(4)+' g/mL';
+    wtRow.style.display='flex';
+  }else{wtRow.style.display='none';}
+  var bd=document.getElementById('ions-breakdown');
+  if(!breakdown.length||total===0){bd.innerHTML='';return;}
+  breakdown.sort(function(a,b){return b.val-a.val;});
+  var maxVal=breakdown[0].val;
+  var rows=breakdown.map(function(b){
+    var pct=(b.val/total*100).toFixed(1);
+    var bw=Math.max(2,Math.round(b.val/maxVal*140));
+    return '<div class="bar-row"><span class="ion-name">'+b.label+'</span>'
+      +'<div class="bar-track" style="width:'+bw+'px;"></div>'
+      +'<span class="bar-val">'+b.val.toLocaleString('en-US',{maximumFractionDigits:1})+' mg/L ('+pct+'%)</span></div>';
+  }).join('');
+  bd.innerHTML='<div class="breakdown">'+rows+'</div>';
+}
+var NACL_WT=[0.01,0.1,0.5,1.0,3.5,5.0,10.0,15.0,20.0,25.0,26.4];
+var NACL_LBL=["Drinking water threshold","Brackish low end","Brackish","Brackish high","Seawater","Brine low","Brine mid","Brine high","Industrial brine","Near saturation","Saturation limit (~25\u00B0C)"];
+var MGSO4_WT=[0.5,1.0,2.0,4.0,6.0,8.0,10.0,14.0,18.0,20.0,21.4];
+var MGSO4_LBL=["Dilute process water","Low mineral brine","Light brine","Moderate brine","Mid brine","Concentrated brine","Process brine","High-strength brine","Near saturation","Near saturation high","Saturation limit (~25\u00B0C)"];
+function naclDensity(C,T){
+  var rw=0.9999842594+6.793952e-5*T-9.095290e-6*T*T+1.001685e-7*T*T*T-1.120083e-10*T*T*T*T+6.536332e-13*T*T*T*T*T;
+  var A=8.24493e-1-4.0899e-3*T+7.6438e-5*T*T-8.2467e-7*T*T*T+5.3875e-9*T*T*T*T;
+  var B=-5.72466e-3+1.0227e-4*T-1.6546e-6*T*T;
+  var S=C/100;
+  return rw+A*S+B*S*Math.pow(S,0.5)+4.8314e-4*S*S;
+}
+function mgso4Density(C,T){
+  var rw=0.9999842594+6.793952e-5*T-9.095290e-6*T*T+1.001685e-7*T*T*T-1.120083e-10*T*T*T*T+6.536332e-13*T*T*T*T*T;
+  var S=C/100;
+  var a1=7.2895e-1-3.8572e-3*T+2.2014e-5*T*T;
+  var a2=-3.2611e-1+2.1516e-3*T-1.4732e-5*T*T;
+  var a3=2.0760e-1-1.0892e-3*T+6.5031e-6*T*T;
+  var a4=-1.2514e-2+5.8450e-5*T-3.2180e-7*T*T;
+  return rw+a1*S+a2*Math.pow(S,1.5)+a3*S*S+a4*S*S*S;
+}
+function getDensity(wt){
+  if(solutionType==='nacl') return naclDensity(wt,tempC);
+  if(solutionType==='mgso4') return mgso4Density(wt,tempC);
+  if(solutionType==='other') return(customDensityVal&&customDensityVal>0)?customDensityVal:null;
+  return null;
+}
+function getMaxWt(){
+  if(solutionType==='nacl') return 26.4;
+  if(solutionType==='mgso4') return 21.4;
+  return Infinity;
+}
+function wtToTDS(wt){var r=getDensity(wt);return r?wt*10*r*1000:null;}
+function tdsToWt(tds){
+  if(solutionType==='other'){var r=customDensityVal;return(r&&r>0)?tds/(10*r*1000):null;}
+  var mx=getMaxWt(),mxT=wtToTDS(mx);
+  if(tds>mxT)return null;
+  var lo=0,hi=mx;
+  for(var i=0;i<80;i++){var mid=(lo+hi)/2;if(wtToTDS(mid)<tds)lo=mid;else hi=mid;}
+  return(lo+hi)/2;
+}
+function category(wt){
+  if(wt<0.05)return"Fresh water";
+  if(wt<0.3)return"Low brackish";
+  if(wt<1.2)return"Brackish";
+  if(wt<4.5)return"Seawater range";
+  if(wt<12)return"Brine low";
+  if(wt<22)return"Brine high";
+  return"Near / at saturation";
+}
+function fmt(n,d){return n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});}
+function showDetail(wt,tds){
+  var rho=getDensity(wt);
+  document.getElementById('d-density').textContent=rho?rho.toFixed(4)+' g/mL':'—';
+  document.getElementById('d-ppm').textContent=fmt(Math.round(wt*10000),0);
+  if(solutionType==='other'){
+    document.getElementById('d-category').textContent='N/A (custom)';
+    document.getElementById('d-err-label').textContent='vs NaCl @ 25\u00B0C';
+    var naclRef=naclDensity(wt,25)*wt*10*1000;
+    var diff=(tds-naclRef)/naclRef*100;
+    document.getElementById('d-err').textContent=(diff>=0?'+':'')+diff.toFixed(2)+'%';
+    document.getElementById('d-note').textContent='Fixed density '+rho.toFixed(4)+' g/mL — no temperature correction applied.';
+  }else{
+    document.getElementById('d-category').textContent=category(wt);
+    document.getElementById('d-err-label').textContent='\u0394 vs 25\u00B0C';
+    var ref25=(solutionType==='nacl'?naclDensity:mgso4Density)(wt,25);
+    var tds25=wt*10*ref25*1000;
+    var errPct=Math.abs(tds-tds25)/tds*100;
+    document.getElementById('d-err').textContent=(tempC===25?'0.00':errPct.toFixed(2))+'%';
+    var ignErr=Math.abs(tds-wt*10000)/tds*100;
+    document.getElementById('d-note').textContent=wt<0.5
+      ?'Dilute: density \u2248 water density. TDS (mg/L) \u2248 TDS (mg/kg).'
+      :'Error ignoring density: ~'+ignErr.toFixed(1)+'%. T-shift from 25\u00B0C adds '+(tempC===25?'0.00':errPct.toFixed(2))+'%.';
+  }
+  document.getElementById('detail-panel').style.display='block';
+}
+function convertFromTDS(){
+  document.getElementById('wt-input').value='';
+  var tds=parseFloat(document.getElementById('tds-input').value);
+  if(isNaN(tds)||tds<0){document.getElementById('wt-result').textContent='—';document.getElementById('detail-panel').style.display='none';return;}
+  if(solutionType==='other'&&!customDensityVal){document.getElementById('wt-result').textContent='enter \u03C1';return;}
+  var wt=tdsToWt(tds);
+  if(wt===null){document.getElementById('wt-result').textContent='> sat.';document.getElementById('detail-panel').style.display='none';return;}
+  document.getElementById('wt-result').textContent=fmt(wt,4);
+  showDetail(wt,tds);
+}
+function convertFromWT(){
+  document.getElementById('tds-input').value='';
+  var wt=parseFloat(document.getElementById('wt-input').value);
+  if(isNaN(wt)||wt<0){document.getElementById('tds-result').textContent='—';document.getElementById('detail-panel').style.display='none';return;}
+  var mx=getMaxWt();
+  if(solutionType!=='other'&&wt>mx){document.getElementById('tds-result').textContent='> sat.';document.getElementById('detail-panel').style.display='none';return;}
+  if(solutionType==='other'&&!customDensityVal){document.getElementById('tds-result').textContent='enter \u03C1';return;}
+  var tds=wtToTDS(wt);
+  if(tds===null){document.getElementById('tds-result').textContent='enter \u03C1';return;}
+  document.getElementById('tds-result').textContent=fmt(Math.round(tds),0);
+  showDetail(wt,tds);
+}
+function recompute(){
+  if(document.getElementById('tds-input').value!=='')convertFromTDS();
+  else if(document.getElementById('wt-input').value!=='')convertFromWT();
+  rebuildTable();
+}
+function rebuildTable(){
+  if(solutionType==='other'||solutionType==='ions'){
+    document.getElementById('ref-section').style.display='none';return;
+  }
+  document.getElementById('ref-section').style.display='block';
+  var wts=solutionType==='nacl'?NACL_WT:MGSO4_WT;
+  var lbs=solutionType==='nacl'?NACL_LBL:MGSO4_LBL;
+  var tbody=document.getElementById('ref-table');
+  tbody.innerHTML='';
+  wts.forEach(function(wt,i){
+    var rho=getDensity(wt);
+    var tds=Math.round(wt*10*rho*1000);
+    var tr=document.createElement('tr');
+    tr.innerHTML='<td>'+wt.toFixed(2)+'</td><td>'+rho.toFixed(4)+'</td><td>'+tds.toLocaleString()+'</td><td style="color:var(--muted)">'+lbs[i]+'</td>';
+    tbody.appendChild(tr);
+  });
+  document.getElementById('ref-footnote').textContent=solutionType==='nacl'
+    ?'Rogers & Pitzer (1982). Valid 0\u2013100 \u00B0C, 0\u201326.4 wt%.'
+    :'Connaughton et al. (1986) / Phang & Stokes (1980). Valid 0\u201380 \u00B0C, 0\u201321.4 wt%.';
+}
+function setSolution(type){
+  solutionType=type;
+  var segs=document.querySelectorAll('#sol-seg button');
+  var order=['nacl','mgso4','ions','other'];
+  segs.forEach(function(b,i){b.classList.toggle('active',order[i]===type);});
+  var isOther=type==='other',isIons=type==='ions',hasTemp=(type==='nacl'||type==='mgso4');
+  document.getElementById('ions-panel').style.display=isIons?'block':'none';
+  document.getElementById('other-panel').style.display=isOther?'block':'none';
+  document.getElementById('temp-card').classList.toggle('disabled',!hasTemp);
+  document.getElementById('converter-panel').style.display=isIons?'none':'block';
+  document.getElementById('detail-panel').style.display='none';
+  document.getElementById('wt-result').textContent='—';
+  document.getElementById('tds-result').textContent='—';
+  document.getElementById('tds-input').value='';
+  document.getElementById('wt-input').value='';
+  var notes={
+    nacl:'NaCl: Rogers & Pitzer (1982), valid 0\u2013100 \u00B0C, 0\u201326.4 wt%.',
+    mgso4:'MgSO\u2084: Connaughton et al. (1986) / Phang & Stokes (1980), valid 0\u201380 \u00B0C, 0\u201321.4 wt%.',
+    ions:'Custom ions: enter individual concentrations in mg/L. TDS = direct sum. Supply density to compute wt%.',
+    other:'Fixed density: constant \u03C1 applied across all concentrations. No temperature correction.'
+  };
+  document.getElementById('sol-note').textContent=notes[type];
+  if(type==='mgso4'){
+    if(tempC>80){tempC=80;document.getElementById('temp-input').value=(tempUnit==='F'?176:80).toFixed(1);document.getElementById('temp-slider').value=(tempUnit==='F'?176:80).toFixed(1);}
+    document.getElementById('temp-slider').max=tempUnit==='F'?176:80;
+    document.getElementById('temp-input').max=tempUnit==='F'?176:80;
+  }else{
+    document.getElementById('temp-slider').max=tempUnit==='F'?212:100;
+    document.getElementById('temp-input').max=tempUnit==='F'?212:100;
+  }
+  updateTempNote();rebuildTable();
+}
+function onCustomDensity(){
+  var v=parseFloat(document.getElementById('custom-density').value);
+  customDensityVal=(isNaN(v)||v<=0)?null:v;
+  recompute();
+}
+function onTempSlider(){
+  var raw=parseFloat(document.getElementById('temp-slider').value);
+  tempC=(tempUnit==='F')?(raw-32)*5/9:raw;
+  document.getElementById('temp-input').value=(tempUnit==='F'?raw:tempC).toFixed(1);
+  updateTempNote();recompute();
+}
+function onTempInput(){
+  var raw=parseFloat(document.getElementById('temp-input').value);
+  if(isNaN(raw))return;
+  tempC=(tempUnit==='F')?(raw-32)*5/9:raw;
+  var maxC=solutionType==='mgso4'?80:100;
+  tempC=Math.max(0,Math.min(maxC,tempC));
+  document.getElementById('temp-slider').value=((tempUnit==='F')?tempC*9/5+32:tempC).toFixed(1);
+  updateTempNote();recompute();
+}
+function setUnit(u){
+  if(u===tempUnit)return;
+  var cur=parseFloat(document.getElementById('temp-input').value)||0;
+  var maxC=solutionType==='mgso4'?80:100;
+  var nv=(u==='F')?cur*9/5+32:(cur-32)*5/9;
+  tempUnit=u;
+  var slMax=(u==='F')?(maxC*9/5+32):maxC;
+  document.getElementById('temp-slider').min=u==='F'?32:0;
+  document.getElementById('temp-slider').max=slMax;
+  document.getElementById('temp-input').min=u==='F'?32:0;
+  document.getElementById('temp-input').max=slMax;
+  document.getElementById('temp-input').value=nv.toFixed(1);
+  document.getElementById('temp-slider').value=nv.toFixed(1);
+  document.getElementById('btn-c').classList.toggle('active',u==='C');
+  document.getElementById('btn-f').classList.toggle('active',u==='F');
+  updateTempNote();recompute();
+}
+function updateTempNote(){
+  var maxC=solutionType==='mgso4'?80:100;
+  var lo=tempUnit==='F'?'32 \u00B0F':'0 \u00B0C';
+  var hi=tempUnit==='F'?(maxC*9/5+32)+' \u00B0F':maxC+' \u00B0C';
+  var extra=solutionType==='nacl'?' Above ~60 \u00B0C, NaCl solubility rises slightly.'
+           :solutionType==='mgso4'?' MgSO\u2084 model valid to 80 \u00B0C.':'';
+  document.getElementById('temp-note').textContent='Valid range: '+lo+' \u2013 '+hi+'.'+extra;
+}
+buildIonRows();
+rebuildTable();
+if('serviceWorker' in navigator){
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  });
+}
+</script>
+</body>
+</html>
