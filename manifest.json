@@ -4,8 +4,8 @@
   "description": "TDS and weight percent converter for NaCl, MgSO4, custom ions, and fixed-density solutions with temperature correction.",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#0f1117",
-  "theme_color": "#1a1d27",
+  "background_color": "#f4f6fb",
+  "theme_color": "#2563eb",
   "orientation": "portrait-primary",
   "icons": [
     {
