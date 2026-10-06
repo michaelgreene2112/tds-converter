@@ -116,7 +116,7 @@ tr:nth-child(even) td{background:rgba(37,99,235,0.03);}
 <body>
 
 <header>
-  <div class="logo">🧪</div>
+  <div class="logo">⚗</div>
   <div>
     <h1>TDS / wt% Converter</h1>
     <p>NaCl · MgSO₄ · Custom ions · Fixed ρ</p>
@@ -221,6 +221,16 @@ tr:nth-child(even) td{background:rgba(37,99,235,0.03);}
       <div class="detail-cell"><div class="dlabel" id="d-err-label">Δ vs 25°C</div><div class="dvalue" id="d-err">—</div></div>
     </div>
     <p class="detail-note" id="d-note"></p>
+    <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;">
+      <div style="font-size:11px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Osmotic Pressure</div>
+      <div class="detail-grid" style="margin-bottom:6px;">
+        <div class="detail-cell"><div class="dlabel">π at T° (bar)</div><div class="dvalue" id="d-pi-t">—</div></div>
+        <div class="detail-cell"><div class="dlabel">π at 25°C (bar)</div><div class="dvalue" id="d-pi-25">—</div></div>
+        <div class="detail-cell"><div class="dlabel">π at T° (psi)</div><div class="dvalue" id="d-pi-psi">—</div></div>
+        <div class="detail-cell"><div class="dlabel">φ (osmotic coeff)</div><div class="dvalue" id="d-pi-phi">—</div></div>
+      </div>
+      <p class="detail-note" id="d-pi-note"></p>
+    </div>
   </div>
 </div>
 
@@ -316,6 +326,8 @@ function calcIons(){
       +'<span class="bar-val">'+b.val.toLocaleString('en-US',{maximumFractionDigits:1})+' mg/L ('+pct+'%)</span></div>';
   }).join('');
   bd.innerHTML='<div class="breakdown">'+rows+'</div>';
+  var _rho2=parseFloat(document.getElementById('ions-density').value)||null;
+  if(_rho2&&total>0){var _wt2=total/(10*_rho2*1000);displayOsmoticPressure(_wt2);document.getElementById('detail-panel').style.display='block';}
 }
 var NACL_WT=[0.01,0.1,0.5,1.0,3.5,5.0,10.0,15.0,20.0,25.0,26.4];
 var NACL_LBL=["Drinking water threshold","Brackish low end","Brackish","Brackish high","Seawater","Brine low","Brine mid","Brine high","Industrial brine","Near saturation","Saturation limit (~25\u00B0C)"];
@@ -391,6 +403,7 @@ function showDetail(wt,tds){
       :'Error ignoring density: ~'+ignErr.toFixed(1)+'%. T-shift from 25\u00B0C adds '+(tempC===25?'0.00':errPct.toFixed(2))+'%.';
   }
   document.getElementById('detail-panel').style.display='block';
+  if(wt!==undefined) displayOsmoticPressure(wt);
 }
 function convertFromTDS(){
   document.getElementById('wt-input').value='';
@@ -516,6 +529,242 @@ function updateTempNote(){
            :solutionType==='mgso4'?' MgSO\u2084 model valid to 80 \u00B0C.':'';
   document.getElementById('temp-note').textContent='Valid range: '+lo+' \u2013 '+hi+'.'+extra;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  OSMOTIC PRESSURE — Full Pitzer ion-interaction model
+//  Formula: π [Pa] = ν · C_molar [mol/m³] · R · T [K] · φ
+//  where C_molar uses actual solution density, φ from Pitzer equations.
+//  References:
+//    Pitzer (1973) J.Phys.Chem 77:268
+//    Kim & Frederick (1988) J.Chem.Eng.Data 33:177  — NaCl β(T)
+//    Silvester & Pitzer (1977) J.Phys.Chem 81:1822  — MgSO4
+//    Harvie, Møller & Weare (1984) Geochim.Cosmochim.Acta 48:723 — mixing
+// ═══════════════════════════════════════════════════════════════════════════
+
+var R_GAS = 8.314472; // J mol⁻¹ K⁻¹
+
+function A_phi(Tk) {
+  return 3.36901532e-01 - 6.32100430e-04*Tk + 9.14252359e-06*Tk*Tk
+       - 1.35143986e-08*Tk*Tk*Tk + 2.26089488e-11*Tk*Tk*Tk*Tk
+       - 2.92844597e-14*Tk*Tk*Tk*Tk*Tk + 5.07917711e-02/(Tk - 215.0);
+}
+
+function phi_NaCl(m, Tk) {
+  if (m < 1e-9) return 1.0;
+  var sqI = Math.sqrt(m); // I = m for 1:1
+  var Aph = A_phi(Tk);
+  var b0 = 1.43783204e-02 + 6.23046789e-04*Tk - 2.67027240e-06*Tk*Tk
+         + 4.29491735e-09*Tk*Tk*Tk - 2.34513918e-12*Tk*Tk*Tk*Tk - 4.90967430e-01/Tk;
+  var b1 = -4.83060685e-01 + 1.40677479e-02*Tk - 3.50589010e-05*Tk*Tk;
+  var Cp =  1.81554825e-04 - 1.75504853e-05*Tk + 3.60876543e-08*Tk*Tk;
+  var f  = -Aph * sqI / (1.0 + 1.2 * sqI);
+  var Bv =  b0 + b1 * Math.exp(-2.0 * sqI);
+  return Math.max(0.05, 1.0 + f + m * Bv + m * m * Cp);
+}
+
+function phi_MgSO4(m, Tk) {
+  if (m < 1e-9) return 1.0;
+  var I   = 4.0 * m; // 2:2 electrolyte
+  var sqI = Math.sqrt(I);
+  var Aph = A_phi(Tk);
+  var dT  = Tk - 298.15;
+  var b0  =  2.2700e-01 + 1.452e-04*dT - 5.58e-07*dT*dT;
+  var b1  =  3.2569e+00 + 8.60e-03*dT;
+  var b2  = -3.7009e+01 - 8.50e-02*dT;
+  var Cp  =  2.6700e-02 + 1.21e-05*dT;
+  var f   = -Aph * sqI / (1.0 + 1.2 * sqI);
+  var Bv  = b0 + b1*Math.exp(-1.4*sqI) + b2*Math.exp(-12.0*sqI);
+  return Math.max(0.05, 1.0 + 4.0*f + m*2.0*Bv + m*m*2.0*Cp);
+}
+
+// Pitzer pair parameters [β0, β1, Cφ, α1, |z+z-|, ν+(of salt), ν-(of salt)]
+var PP = {
+  'na:cl':   [0.07650, 0.2664,  0.00127, 2.0,1],
+  'na:so4':  [0.01958, 1.1130,  0.00497, 2.0,2],
+  'na:hco3': [0.02800, 0.0440,  0.0,     2.0,1],
+  'na:co3':  [0.03620, 1.5100,  0.00529, 2.0,2],
+  'na:no3':  [0.00440, 0.3980, -0.00600, 2.0,1],
+  'na:po4':  [0.10170, 0.6700,  0.0,     2.0,3],
+  'na:f':    [0.02160, 0.2120,  0.0,     2.0,1],
+  'na:br':   [0.08970, 0.2990,  0.00116, 2.0,1],
+  'k:cl':    [0.04835, 0.2122, -0.00084, 2.0,1],
+  'k:so4':   [0.04995, 0.7793,  0.0,     2.0,2],
+  'k:no3':   [-0.00816,0.5490, -0.00048, 2.0,1],
+  'k:br':    [0.09690, 0.2140,  0.0,     2.0,1],
+  'li:cl':   [0.14940, 0.3074,  0.00359, 2.0,1],
+  'nh4:cl':  [0.05200, 0.1918, -0.00301, 2.0,1],
+  'nh4:so4': [0.04220, 0.6360, -0.00300, 2.0,2],
+  'ca:cl':   [0.31590, 1.6140, -0.00034, 2.0,2],
+  'ca:so4':  [0.19000, 2.6500,  0.0,     1.4,4],
+  'ca:hco3': [0.40000, 2.9770,  0.0,     2.0,2],
+  'ca:no3':  [0.21000, 1.4090, -0.02100, 2.0,2],
+  'ca:po4':  [0.44000, 2.0000,  0.0,     1.4,6],
+  'mg:cl':   [0.35235, 1.6815,  0.00519, 2.0,2],
+  'mg:so4':  [0.22100, 3.3430, -0.02500, 1.4,4],
+  'mg:hco3': [0.32900, 0.6072,  0.0,     2.0,2],
+  'mg:no3':  [0.36790, 1.7480,  0.01420, 2.0,2],
+  'mg:po4':  [0.38000, 2.1000,  0.0,     1.4,6],
+  'sr:cl':   [0.28580, 1.6673, -0.00130, 2.0,2],
+  'ba:cl':   [0.26280, 1.4963, -0.01938, 2.0,2],
+  'fe2:cl':  [0.33593, 1.5300,  0.0,     2.0,2],
+  'fe2:so4': [0.22680, 3.0630,  0.01636, 1.4,4],
+  'fe3:cl':  [0.55070, 5.8200,  0.04900, 2.0,3],
+  'al:cl':   [0.61400, 6.6830,  0.01490, 2.0,3],
+  'al:so4':  [0.42900, 4.0000,  0.0,     1.4,6],
+  'mn:cl':   [0.32720, 1.5270,  0.0,     2.0,2],
+  'mn:so4':  [0.20650, 2.9180,  0.01636, 1.4,4],
+};
+
+var ION_MW = {
+  na:22.990,ca:40.078,mg:24.305,k:39.098,li:6.941,
+  fe2:55.845,fe3:55.845,mn:54.938,al:26.982,sr:87.620,ba:137.327,nh4:18.038,
+  cl:35.453,so4:96.060,hco3:61.017,co3:60.009,no3:62.004,
+  po4:94.971,f:18.998,br:79.904,sio2:60.083,b:61.833
+};
+var ION_Z = {
+  na:1,ca:2,mg:2,k:1,li:1,fe2:2,fe3:3,mn:2,al:3,sr:2,ba:2,nh4:1,
+  cl:1,so4:2,hco3:1,co3:2,no3:1,po4:3,f:1,br:1,sio2:0,b:0
+};
+var CATION_IDS = ['na','ca','mg','k','li','fe2','fe3','mn','al','sr','ba','nh4'];
+var ANION_IDS  = ['cl','so4','hco3','co3','no3','po4','f','br','sio2','b'];
+
+function phi_multiion(ionObj, Tk) {
+  // ionObj: {ionId: molality_mol_per_kg}
+  var I = 0;
+  Object.keys(ionObj).forEach(function(id) {
+    var z = ION_Z[id] || 0;
+    I += ionObj[id] * z * z;
+  });
+  I *= 0.5;
+  if (I < 1e-12) return {phi:1.0, I:0, sumM:0};
+  var sqI = Math.sqrt(I);
+  var Aph = A_phi(Tk);
+  var f_phi = -Aph * sqI / (1.0 + 1.2 * sqI);
+
+  var sumM = 0;
+  Object.keys(ionObj).forEach(function(id) { sumM += ionObj[id]; });
+  if (sumM < 1e-12) return {phi:1.0, I:I, sumM:0};
+
+  var dblSum = 0;
+  CATION_IDS.forEach(function(c) {
+    if (!ionObj[c] || ionObj[c] < 1e-12) return;
+    ANION_IDS.forEach(function(a) {
+      if (!ionObj[a] || ionObj[a] < 1e-12) return;
+      var p = PP[c+':'+a];
+      if (!p) return;
+      var b0=p[0],b1=p[1],Cp=p[2],al=p[3],zz=p[4];
+      var Bv = b0 + b1*Math.exp(-al*sqI);
+      var Ct = (zz > 0) ? Cp * Math.sqrt(I) * zz / (2*Math.sqrt(zz)) : 0;
+      dblSum += ionObj[c] * ionObj[a] * (Bv + Ct);
+    });
+  });
+
+  var phi = 1.0 + (2.0 / sumM) * (-Aph * I * sqI / (1.0 + 1.2*sqI) + dblSum);
+  return {phi: Math.max(0.05, phi), I: I, sumM: sumM};
+}
+
+function piBar(nu, C_mol_per_m3, phi, R, Tk) {
+  // π [Pa] = ν · C · φ · R · T  → bar
+  return nu * C_mol_per_m3 * phi * R * Tk / 1e5;
+}
+
+function molarConc_mol_per_m3(wt, MW_solute, rho_sol_g_per_mL) {
+  // wt in %, MW in g/mol, rho in g/mL
+  // C [mol/L] = (wt/100 * rho * 1000) / MW
+  return (wt / 100.0 * rho_sol_g_per_mL * 1000.0) / MW_solute * 1000.0; // mol/m³
+}
+
+function calcOsmoticPressure(wt, Tk25, TkT, sType, ionDataArr, rhoForIons) {
+  var R = R_GAS;
+  if (sType === 'nacl') {
+    var rho_T  = naclDensity(wt, TkT - 273.15);
+    var rho_25 = naclDensity(wt, 25.0);
+    var C_T    = molarConc_mol_per_m3(wt, 58.443, rho_T);
+    var C_25   = molarConc_mol_per_m3(wt, 58.443, rho_25);
+    var wf = wt/100; var m = (wf/58.443)/((1-wf)/1000);
+    var phi_T  = phi_NaCl(m, TkT);
+    var phi_25 = phi_NaCl(m, Tk25);
+    return {
+      piT:   piBar(2, C_T,  phi_T,  R, TkT),
+      pi25:  piBar(2, C_25, phi_25, R, Tk25),
+      phi_T: phi_T, phi_25: phi_25,
+      model: 'Pitzer / Kim & Frederick (1988)'
+    };
+  } else if (sType === 'mgso4') {
+    var rho_T  = mgso4Density(wt, Math.min(TkT-273.15, 80));
+    var rho_25 = mgso4Density(wt, 25.0);
+    var C_T    = molarConc_mol_per_m3(wt, 120.369, rho_T);
+    var C_25   = molarConc_mol_per_m3(wt, 120.369, rho_25);
+    var wf = wt/100; var m = (wf/120.369)/((1-wf)/1000);
+    var phi_T  = phi_MgSO4(m, TkT);
+    var phi_25 = phi_MgSO4(m, Tk25);
+    return {
+      piT:   piBar(2, C_T,  phi_T,  R, TkT),
+      pi25:  piBar(2, C_25, phi_25, R, Tk25),
+      phi_T: phi_T, phi_25: phi_25,
+      model: 'Pitzer / Silvester & Pitzer (1977)'
+    };
+  } else if (sType === 'ions' && ionDataArr && ionDataArr.length > 0) {
+    var rho = rhoForIons || 1.0;
+    // Build molality dict
+    var molal = {};
+    var totalMgL = 0;
+    ionDataArr.forEach(function(ion) {
+      var mw = ION_MW[ion.id];
+      if (!mw || !ion.mgL) return;
+      var molPerL = ion.mgL / (mw * 1000);
+      molal[ion.id] = molPerL / rho; // mol/kg water (approx)
+      totalMgL += ion.mgL;
+    });
+    var res_T  = phi_multiion(molal, TkT);
+    var res_25 = phi_multiion(molal, Tk25);
+    // Total molar concentration (all ions, mol/m³)
+    var C_total = 0;
+    Object.keys(molal).forEach(function(id) {
+      C_total += molal[id] * rho * 1000; // mol/m³
+    });
+    return {
+      piT:   res_T.sumM  * res_T.phi  * R * TkT  * rho * 1000 / 1e5,
+      pi25:  res_25.sumM * res_25.phi * R * Tk25  * rho * 1000 / 1e5,
+      phi_T: res_T.phi, phi_25: res_25.phi,
+      model: 'Pitzer mixing / Harvie-Weare (1984)'
+    };
+  }
+  return null;
+}
+
+function displayOsmoticPressure(wt) {
+  var TkT  = tempC + 273.15;
+  var Tk25 = 298.15;
+  var ionDataArr = [];
+  var rhoForIons = null;
+  if (solutionType === 'ions') {
+    IONS.cations.concat(IONS.anions).forEach(function(ion) {
+      var el = document.getElementById('ion-'+ion.id);
+      var v  = el ? parseFloat(el.value)||0 : 0;
+      if (v > 0) ionDataArr.push({id: ion.id, mgL: v});
+    });
+    rhoForIons = parseFloat(document.getElementById('ions-density').value)||1.0;
+  }
+  var res = calcOsmoticPressure(wt, Tk25, TkT, solutionType, ionDataArr, rhoForIons);
+  if (!res) {
+    ['d-pi-t','d-pi-25','d-pi-psi','d-pi-phi'].forEach(function(id){
+      document.getElementById(id).textContent='—';
+    });
+    document.getElementById('d-pi-note').textContent='Osmotic pressure not calculable for fixed-density mode (ion identity unknown).';
+    return;
+  }
+  document.getElementById('d-pi-t').textContent   = res.piT.toFixed(2)  + ' bar';
+  document.getElementById('d-pi-25').textContent  = res.pi25.toFixed(2) + ' bar';
+  document.getElementById('d-pi-psi').textContent = (res.piT * 14.5038).toFixed(1);
+  document.getElementById('d-pi-phi').textContent = res.phi_T.toFixed(4) + ' / ' + res.phi_25.toFixed(4) + ' (25°C)';
+  document.getElementById('d-pi-note').textContent = res.model + '.  '
+    + 'van\u2019t Hoff (ideal) would give '
+    + (res.piT / (res.phi_T || 1) * 1.0).toFixed(2) + ' bar — actual is '
+    + ((res.phi_T - 1.0)*100).toFixed(1).replace('-','') + '% '
+    + (res.phi_T < 1 ? 'lower' : 'higher') + ' due to ion interactions.';
+}
+
 buildIonRows();
 rebuildTable();
 if('serviceWorker' in navigator){
