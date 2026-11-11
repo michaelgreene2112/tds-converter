@@ -108,6 +108,19 @@ tr:nth-child(even) td{background:rgba(37,99,235,0.03);}
 .footnote{font-size:11px;color:var(--hint);margin-top:6px;}
 .sol-note{font-size:11px;color:var(--hint);margin-top:8px;}
 .disabled{opacity:0.4;pointer-events:none;}
+select{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);
+  color:var(--text);font-size:13px;padding:6px 8px;outline:none;font-family:var(--font);}
+select:focus{border-color:var(--accent);}
+.bal-tables{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+@media(max-width:480px){.bal-tables{grid-template-columns:1fr;}}
+.bal-tables table td,.bal-tables table th{padding:5px 8px;font-size:12px;}
+.bal-tables tr.tot td{font-weight:600;border-top:2px solid var(--border2);}
+.bal-tables tr.addrow td{color:var(--accent);font-style:italic;}
+.bal-controls{display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;margin-top:12px;font-size:13px;color:var(--muted);}
+.bal-controls label.toggle{grid-column:1/-1;display:flex;align-items:center;gap:8px;color:var(--text);font-weight:500;cursor:pointer;}
+.bal-controls input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);}
+.status-ok{color:var(--success);} .status-bad{color:var(--danger);}
+
 ::-webkit-scrollbar{width:6px;height:6px;}
 ::-webkit-scrollbar-track{background:var(--bg);}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
@@ -164,6 +177,28 @@ tr:nth-child(even) td{background:rgba(37,99,235,0.03);}
     <span class="big" id="ions-wt-result">—</span>
     <span class="note" id="ions-wt-note"></span>
   </div>
+  <div id="ions-bal-block" style="display:none;border-top:1px solid var(--border);margin-top:12px;padding-top:12px;">
+    <div class="card-label">Ion balance</div>
+    <div class="bal-tables">
+      <div class="ref-table-wrap"><table><thead><tr><th style="text-align:left;">Cation</th><th>mg/L</th><th>meq/L</th></tr></thead><tbody id="bal-cat-body"></tbody></table></div>
+      <div class="ref-table-wrap"><table><thead><tr><th style="text-align:left;">Anion</th><th>mg/L</th><th>meq/L</th></tr></thead><tbody id="bal-an-body"></tbody></table></div>
+    </div>
+    <div class="detail-grid" style="margin-top:10px;margin-bottom:6px;">
+      <div class="detail-cell"><div class="dlabel">Σ cations</div><div class="dvalue" id="bal-sc">—</div></div>
+      <div class="detail-cell"><div class="dlabel">Σ anions</div><div class="dvalue" id="bal-sa">—</div></div>
+      <div class="detail-cell"><div class="dlabel">Δ (cat − an)</div><div class="dvalue" id="bal-d">—</div></div>
+      <div class="detail-cell"><div class="dlabel">% difference</div><div class="dvalue" id="bal-pct">—</div></div>
+    </div>
+    <p class="detail-note" id="bal-status"></p>
+    <div class="bal-controls">
+      <label class="toggle"><input type="checkbox" id="bal-apply" onchange="calcIons()" /> Auto-balance (adds the selected ion to close the gap)</label>
+      <span>If cation-deficient, add</span>
+      <select id="bal-cat" onchange="calcIons()"><option value="na">Na⁺ (sodium)</option><option value="k">K⁺ (potassium)</option></select>
+      <span>If anion-deficient, add</span>
+      <select id="bal-an" onchange="calcIons()"><option value="cl">Cl⁻ (chloride)</option><option value="hco3">Alkalinity (as HCO₃⁻)</option></select>
+    </div>
+    <p class="detail-note" id="bal-note" style="margin-top:8px;"></p>
+  </div>
   <div id="ions-pi-block" style="display:none;border-top:1px solid var(--border);margin-top:12px;padding-top:12px;">
     <div class="card-label">Osmotic pressure</div>
     <div class="detail-grid" style="margin-bottom:6px;">
@@ -172,7 +207,7 @@ tr:nth-child(even) td{background:rgba(37,99,235,0.03);}
       <div class="detail-cell"><div class="dlabel">π at T</div><div class="dvalue" id="ip-psi">—</div></div>
       <div class="detail-cell"><div class="dlabel">φ at T / 25 °C</div><div class="dvalue" id="ip-phi">—</div></div>
     </div>
-    <div class="detail-cell" style="margin-bottom:6px;"><div class="dlabel">Charge balance (cations / anions)</div><div class="dvalue" id="ip-cb">—</div></div>
+    
     <p class="detail-note" id="ip-note"></p>
     <p class="detail-note" style="color:var(--hint);margin-top:6px;">Model: Pitzer with HMW (1984) binary, θ, ψ and Eθ mixing terms. Ion pairing/speciation is not computed: enter PO₄ and Fe³⁺/Al³⁺ as analytical totals and treat their contribution as approximate. SiO₂ and B are treated as ideal neutral solutes.</p>
   </div>
@@ -723,9 +758,44 @@ function estimateDensityNaClEq(tds, Tc){
   return rho;
 }
 
+function ionMeq(id, mgL){ return mgL/ION_MW[id]*(ION_Z[id]||0); }
+function fmtN(v,d){ return v.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+
+// Standard Methods 1030 E acceptance criteria (based on anion sum)
+function smCriterion(anSum, dMeq, pct){
+  if(anSum<=3.0)  return {ok:Math.abs(dMeq)<=0.2, txt:'\u00B10.2 meq/L (anion sum \u2264 3.0 meq/L)'};
+  if(anSum<=10.0) return {ok:Math.abs(pct)<=2,    txt:'\u00B12% (anion sum 3\u201310 meq/L)'};
+  return               {ok:Math.abs(pct)<=5,    txt:'\u00B15% (anion sum > 10 meq/L)'};
+}
+
 function calcIons(){
-  var ions=getIonInputs(), total=0;
-  ions.forEach(function(i){ total+=i.mgL; });
+  var raw=getIonInputs();
+
+  // ---- Raw charge balance ----
+  var cat=0, an=0;
+  raw.forEach(function(i){ var q=ionMeq(i.id,i.mgL);
+    if(CAT_IDS.indexOf(i.id)>=0) cat+=q; else if(AN_IDS.indexOf(i.id)>=0) an+=q; });
+  var d=cat-an, pct=(cat+an)>0?d/(cat+an)*100:0;
+
+  // ---- Balancing addition ----
+  var apply=document.getElementById('bal-apply').checked;
+  var add=null;
+  if(apply && Math.abs(d)>1e-9){
+    var id = d<0 ? document.getElementById('bal-cat').value : document.getElementById('bal-an').value;
+    var meq=Math.abs(d);
+    add={id:id, meq:meq, mgL:meq*ION_MW[id]/ION_Z[id]};
+  }
+  var ions=raw.map(function(i){ return {id:i.id,label:i.label,mgL:i.mgL,bal:0}; });
+  if(add){
+    var ex=ions.filter(function(i){return i.id===add.id;})[0];
+    if(ex){ ex.mgL+=add.mgL; ex.bal=add.mgL; }
+    else {
+      var lbl=IONS.cations.concat(IONS.anions).filter(function(x){return x.id===add.id;})[0].label;
+      ions.push({id:add.id,label:lbl,mgL:add.mgL,bal:add.mgL});
+    }
+  }
+
+  var total=0; ions.forEach(function(i){ total+=i.mgL; });
   document.getElementById('ions-tds-sum').textContent=total.toLocaleString('en-US',{maximumFractionDigits:1});
 
   var rhoIn=parseFloat(document.getElementById('ions-density').value);
@@ -735,22 +805,62 @@ function calcIons(){
   if(total>0){
     document.getElementById('ions-wt-result').textContent=(total/(10*rho*1000)).toFixed(4);
     document.getElementById('ions-wt-note').textContent='\u03C1 = '+rho.toFixed(4)+' g/mL '
-      +(rhoEst?'(estimated, NaCl-equivalent at T \u2014 enter a measured value for best accuracy)':'(supplied)');
+      +(rhoEst?'(estimated, NaCl-equivalent at T \u2014 enter a measured value for best accuracy)':'(supplied)')
+      +(add?'  |  includes balancing ion':'');
     wtRow.style.display='flex';
   } else wtRow.style.display='none';
 
-  // Charge balance
-  var cat=0, an=0;
-  ions.forEach(function(i){ var z=ION_Z[i.id]||0, meq=i.mgL/ION_MW[i.id]*z;
-    if(CAT_IDS.indexOf(i.id)>=0) cat+=meq; else if(AN_IDS.indexOf(i.id)>=0) an+=meq; });
-  var cbEl=document.getElementById('ip-cb');
-  if(cat+an>0){
-    var cb=(cat-an)/(cat+an)*100;
-    cbEl.textContent=cat.toFixed(2)+' / '+an.toFixed(2)+' meq/L  ('+(cb>=0?'+':'')+cb.toFixed(1)+'%)';
-    cbEl.style.color=Math.abs(cb)>5?'var(--danger)':'var(--text)';
-  } else { cbEl.textContent='\u2014'; cbEl.style.color='var(--text)'; }
+  // ---- Ion balance tables ----
+  var balBlock=document.getElementById('ions-bal-block');
+  if(!raw.length){ balBlock.style.display='none'; }
+  else {
+    balBlock.style.display='block';
+    function rows(ids, body){
+      var html='', sum=0;
+      raw.forEach(function(i){ if(ids.indexOf(i.id)<0) return;
+        var q=ionMeq(i.id,i.mgL); sum+=q;
+        html+='<tr><td>'+i.label+'</td><td>'+fmtN(i.mgL,1)+'</td><td>'+fmtN(q,3)+'</td></tr>'; });
+      if(add && ids.indexOf(add.id)>=0){
+        var lbl=IONS.cations.concat(IONS.anions).filter(function(x){return x.id===add.id;})[0].label;
+        sum+=add.meq;
+        html+='<tr class="addrow"><td>+ '+lbl+' (balance)</td><td>'+fmtN(add.mgL,1)+'</td><td>'+fmtN(add.meq,3)+'</td></tr>';
+      }
+      if(!html) html='<tr><td colspan="3" style="color:var(--hint);text-align:left;">none entered</td></tr>';
+      html+='<tr class="tot"><td>Total</td><td></td><td>'+fmtN(sum,3)+'</td></tr>';
+      document.getElementById(body).innerHTML=html;
+    }
+    rows(CAT_IDS,'bal-cat-body');
+    rows(AN_IDS,'bal-an-body');
 
-  // Breakdown bars
+    document.getElementById('bal-sc').textContent=fmtN(cat,3)+' meq/L';
+    document.getElementById('bal-sa').textContent=fmtN(an,3)+' meq/L';
+    document.getElementById('bal-d').textContent=(d>=0?'+':'')+fmtN(d,3)+' meq/L';
+    var pEl=document.getElementById('bal-pct');
+    pEl.textContent=(pct>=0?'+':'')+pct.toFixed(2)+'%';
+    var crit=smCriterion(an,d,pct);
+    pEl.className='dvalue '+(crit.ok?'status-ok':'status-bad');
+    var st=document.getElementById('bal-status');
+    st.innerHTML=(Math.abs(d)<1e-9?'Balanced.':
+      (d<0?'Cation-deficient':'Anion-deficient')+' by '+fmtN(Math.abs(d),3)+' meq/L. ')
+      +' Standard Methods 1030 E criterion '+crit.txt+': '
+      +'<span class="'+(crit.ok?'status-ok':'status-bad')+'">'+(crit.ok?'acceptable':'not met')+'</span>.'
+      +' % difference = 100\u00B7(\u03A3cat \u2212 \u03A3an)/(\u03A3cat + \u03A3an). Values shown are before any balancing addition.';
+
+    var note=document.getElementById('bal-note');
+    if(add){
+      var extra='';
+      if(add.id==='hco3') extra=' (= '+fmtN(add.meq*50.04,1)+' mg/L as CaCO\u2083)';
+      note.textContent='Balancing addition: +'+fmtN(add.mgL,1)+' mg/L '
+        +(add.id==='na'?'Na\u207A':add.id==='k'?'K\u207A':add.id==='cl'?'Cl\u207B':'HCO\u2083\u207B')+extra
+        +' ('+fmtN(add.meq,3)+' meq/L). Included in TDS, wt% and osmotic pressure. Your entered values are unchanged.';
+    } else if(apply){
+      note.textContent='Already balanced \u2014 no addition required.';
+    } else {
+      note.textContent='Auto-balance off. Alkalinity is added as HCO\u2083\u207B, which assumes pH < 8.3 (carbonate negligible).';
+    }
+  }
+
+  // ---- Breakdown bars ----
   var bd=document.getElementById('ions-breakdown');
   if(!ions.length){ bd.innerHTML=''; }
   else {
@@ -758,20 +868,22 @@ function calcIons(){
     bd.innerHTML='<div class="breakdown">'+sorted.map(function(b){
       return '<div class="bar-row"><span class="ion-name">'+b.label+'</span>'
         +'<div class="bar-track" style="width:'+Math.max(2,Math.round(b.mgL/maxV*140))+'px;"></div>'
-        +'<span class="bar-val">'+b.mgL.toLocaleString('en-US',{maximumFractionDigits:1})+' mg/L ('+(b.mgL/total*100).toFixed(1)+'%)</span></div>';
+        +'<span class="bar-val">'+fmtN(b.mgL,1)+' mg/L ('+(b.mgL/total*100).toFixed(1)+'%)'
+        +(b.bal>0?' \u2014 incl. +'+fmtN(b.bal,1)+' balance':'')+'</span></div>';
     }).join('')+'</div>';
   }
 
-  // Osmotic pressure
+  // ---- Osmotic pressure ----
   var block=document.getElementById('ions-pi-block');
   if(total<=0){ block.style.display='none'; return; }
   block.style.display='block';
   var res=calcOsmoticIons(ions, rho, total, tempC);
   if(!res){ setPiCells('ip', null, 'Concentration too high for a valid water-mass basis \u2014 check inputs and density.'); return; }
   var notes=['\u03A3m = '+res.sumM.toFixed(4)+' mol/kg, I = '+res.I.toFixed(4)+' mol/kg.'];
+  if(add) notes.push('Includes balancing ion.');
   if(res.analogs.length) notes.push('Charge-type analog parameters used for: '+res.analogs.join(', ')+'.');
   if(res.missing.length) notes.push('No parameters (ideal B=0) for: '+res.missing.join(', ')+'.');
-  if(Math.abs(cat-an)/(cat+an)>0.05) notes.push('Charge imbalance >5% \u2014 \u03C0 may be unreliable; check analysis.');
+  if(!add && (cat+an)>0 && Math.abs(pct)>5) notes.push('Charge imbalance >5% \u2014 \u03C0 may be unreliable; consider auto-balance or check the analysis.');
   setPiCells('ip', res, notes.join(' '));
 }
 

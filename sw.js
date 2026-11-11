@@ -1,4 +1,4 @@
-const CACHE = 'tds-converter-v5';
+const CACHE = 'tds-converter-v6';
 const ASSETS = [
   './',
   './index.html',
